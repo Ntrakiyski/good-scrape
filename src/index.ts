@@ -137,21 +137,22 @@ const program = Effect.gen(function* () {
 						ok++
 						const finalUrl = result.url ?? urls[idx]!
 						const title = result.title || new URL(finalUrl).pathname
-						let md = frontmatter(title, finalUrl) + (result.content ?? "")
-
+						const content = result.content ?? ""
 						const media = result.media ?? []
+
+						let fullMd = frontmatter(title, finalUrl) + content
 						if (media.length > 0) {
-							md += "\n\n---\n\n### Page Assets\n\n"
+							fullMd += "\n\n---\n\n### Page Assets\n\n"
 							for (const item of media) {
 								const label = item.alt || (item.type === "video" ? "video" : item.url)
-								md += `- [${label}](${item.url})\n`
+								fullMd += `- [${label}](${item.url})\n`
 							}
 						}
 
 						const page = {
 							url: finalUrl,
 							title,
-							markdown: md,
+							markdown: fullMd,
 						}
 
 						const parsedUrl = new URL(finalUrl)
@@ -163,11 +164,11 @@ const program = Effect.gen(function* () {
 						if (filepath.endsWith("/")) filepath += "index"
 						filepath = filepath.replace(/\.html?$/, "").replace(/^\//, "")
 						if (!filepath.endsWith(".md")) filepath += ".md"
-						if (config.format && md.length <= 10_000) {
+						if (config.format && fullMd.length <= 50_000) {
 							if (config.format === "json") {
-								process.stdout.write(`${JSON.stringify({ title, url: finalUrl, content: md })}\n`)
+								process.stdout.write(`${JSON.stringify({ title, url: finalUrl, content, media })}\n`)
 							} else {
-								process.stdout.write(`${md}\n\n---\n\n`)
+								process.stdout.write(`${fullMd}\n\n---\n\n`)
 							}
 						} else {
 							recentFiles.push(filepath)
