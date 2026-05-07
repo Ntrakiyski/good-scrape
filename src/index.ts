@@ -14,17 +14,19 @@ interface Config {
 	url: string
 	out: string
 	max: number
+	format?: "json" | "md"
 }
 
 const parseArgs = (args: string[]): Config => {
 	if (!args.length || args.includes("-h") || args.includes("--help")) {
 		console.log(`
-  webpull - Pull docs into markdown
+  webpull-cli - Pull docs into markdown
 
-  Usage:  webpull <url> [options]
+  Usage:  webpull-cli <url> [options]
 
-    -o, --out <dir>   Output directory (default: ./<hostname>)
-    -m, --max <n>     Max pages (default: 500)
+    -o, --out <dir>    Output directory (default: ./<hostname>)
+    -m, --max <n>      Max pages (default: 500)
+    -f, --format <fmt> Output format: json or md (prints to terminal; writes to file if >10k chars)
 `)
 		process.exit(0)
 	}
@@ -43,6 +45,8 @@ const parseArgs = (args: string[]): Config => {
 	let out = `./${url.hostname}`
 	let max = 500
 
+	let format: Config["format"]
+
 	for (let i = 1; i < args.length; i++) {
 		const arg = args[i]
 		const next = args[i + 1]
@@ -52,10 +56,18 @@ const parseArgs = (args: string[]): Config => {
 		} else if (("-m" === arg || "--max" === arg) && next) {
 			max = +next
 			i++
+		} else if (("-f" === arg || "--format" === arg) && next) {
+			if (next === "json" || next === "md") {
+				format = next
+			} else {
+				console.error(`Bad format: ${next} (use json or md)`)
+				process.exit(1)
+			}
+			i++
 		}
 	}
 
-	return { url: url.href, out: resolve(out), max }
+	return { url: url.href, out: resolve(out), max, format }
 }
 
 const program = Effect.gen(function* () {
@@ -151,9 +163,27 @@ const program = Effect.gen(function* () {
 						if (filepath.endsWith("/")) filepath += "index"
 						filepath = filepath.replace(/\.html?$/, "").replace(/^\//, "")
 						if (!filepath.endsWith(".md")) filepath += ".md"
-						recentFiles.push(filepath)
-
-						Effect.runPromise(write(page, config.out))
+						if (config.format && md.length <= 10_000) {
+							if (config.format === "json") {
+								process.stdout.write(`${JSON.stringify({ title, url: finalUrl, content: md })}\n`)
+							} else {
+								process.stdout.write(`${md}\n\n---\n\n`)
+							}
+						} else {
+							recentFiles.push(filepath)
+							if (config.format) {
+								Effect.runPromise(
+									write(page, config.out).pipe(
+										Effect.map((path) => {
+											process.stderr.write(`  \x1b[90m→\x1b[0m ${path} \x1b[33m(file too large for terminal)\x1b[0m\n`)
+											return path
+										}),
+									),
+								)
+							} else {
+								Effect.runPromise(write(page, config.out))
+							}
+						}
 					} else {
 						err++
 					}

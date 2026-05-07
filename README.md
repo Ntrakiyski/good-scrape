@@ -29,8 +29,9 @@ bun install -g webpull-cli
 webpull-cli <url> [options]
 
 Options:
-  -o, --out <dir>   Output directory (default: ./<hostname>)
-  -m, --max <n>     Max pages to pull (default: 500)
+  -o, --out <dir>    Output directory (default: ./<hostname>)
+  -m, --max <n>      Max pages to pull (default: 500)
+  -f, --format <fmt> Print to terminal: json or md (writes file if >10k chars)
 ```
 
 ## Examples
@@ -41,6 +42,12 @@ webpull-cli https://react.dev
 
 # Custom output dir, limit to 100 pages
 webpull-cli https://docs.python.org -o ./python-docs -m 100
+
+# Print to terminal as JSON (auto-files if >10k chars)
+webpull-cli https://example.com/docs -f json
+
+# Print to terminal as markdown
+webpull-cli https://example.com/docs -f md
 ```
 
 ## How it works

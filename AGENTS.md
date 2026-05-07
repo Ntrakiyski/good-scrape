@@ -13,6 +13,8 @@
 ```bash
 bun run src/index.ts <url>        # Run the CLI directly
 bun run bin/webpull <url>          # Same (entrypoint wrapper)
+bun run src/index.ts <url> -f json  # Print JSON to terminal (file if >10k chars)
+bun run src/index.ts <url> -f md    # Print markdown to terminal (file if >10k chars)
 ```
 
 No build, no test, no typecheck scripts in package.json. To typecheck: `bun run tsc --noEmit`.
