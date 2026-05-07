@@ -1,9 +1,16 @@
+export interface MediaRef {
+	url: string
+	alt?: string
+	type?: "image" | "video" | "source"
+}
+
 export interface WorkerResult {
 	ok: boolean
 	url?: string
 	title?: string
 	content?: string
 	error?: string
+	media?: MediaRef[]
 }
 
 const WORKER_PATH = new URL("./worker.ts", import.meta.url).href

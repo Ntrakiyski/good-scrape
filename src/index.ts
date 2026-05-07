@@ -125,10 +125,21 @@ const program = Effect.gen(function* () {
 						ok++
 						const finalUrl = result.url ?? urls[idx]!
 						const title = result.title || new URL(finalUrl).pathname
+						let md = frontmatter(title, finalUrl) + (result.content ?? "")
+
+						const media = result.media ?? []
+						if (media.length > 0) {
+							md += "\n\n---\n\n### Page Assets\n\n"
+							for (const item of media) {
+								const label = item.alt || (item.type === "video" ? "video" : item.url)
+								md += `- [${label}](${item.url})\n`
+							}
+						}
+
 						const page = {
 							url: finalUrl,
 							title,
-							markdown: frontmatter(title, finalUrl) + (result.content ?? ""),
+							markdown: md,
 						}
 
 						const parsedUrl = new URL(finalUrl)

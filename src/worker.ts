@@ -20,6 +20,55 @@ const DEFUDDLE_TIMEOUT = 5000
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
 	Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))])
 
+export interface MediaRef {
+	url: string
+	alt?: string
+	type?: "image" | "video" | "source"
+}
+
+const extractMedia = (html: string, baseUrl: string): MediaRef[] => {
+	const { document } = parseHTML(html)
+	const base = new URL(baseUrl)
+	const seen = new Set<string>()
+	const results: MediaRef[] = []
+
+	const resolveUrl = (src: string): string => {
+		if (!src || src.startsWith("data:") || src.startsWith("blob:")) return ""
+		try {
+			return new URL(src, base).href
+		} catch {
+			return ""
+		}
+	}
+
+	const add = (src: string, type: MediaRef["type"], alt?: string) => {
+		const url = resolveUrl(src)
+		if (url && !seen.has(url)) {
+			seen.add(url)
+			results.push({ url, alt, type })
+		}
+	}
+
+	document.querySelectorAll("img[src], img[data-src]").forEach((el) => {
+		add(el.getAttribute("src") || el.getAttribute("data-src") || "", "image", el.getAttribute("alt") || undefined)
+	})
+
+	document.querySelectorAll("video[src]").forEach((el) => {
+		add(el.getAttribute("src") || "", "video", "video")
+		el.querySelectorAll("source").forEach((src) => {
+			add(src.getAttribute("src") || src.getAttribute("srcset") || "", "video")
+		})
+	})
+
+	document.querySelectorAll("[style]").forEach((el) => {
+		const style = el.getAttribute("style") || ""
+		const match = style.match(/url\(["']?([^"')\s]+)/)
+		if (match) add(match[1], "image")
+	})
+
+	return results
+}
+
 const fallbackExtract = (html: string) => {
 	const { document } = parseHTML(html)
 	const t = document.querySelector("title")?.textContent || ""
@@ -44,31 +93,35 @@ self.onmessage = async (e: MessageEvent<{ url: string; useBrowser?: boolean }>) 
 
 		if (ct.includes("text/markdown") || (!ct.includes("text/html") && MARKDOWN_SIGNAL.test(text))) {
 			const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() || new URL(finalUrl).pathname
-			self.postMessage({ ok: true, url: finalUrl, title, content: text })
+			self.postMessage({ ok: true, url: finalUrl, title, content: text, media: [] })
 			return
 		}
+
+		let media: MediaRef[] = []
 
 		// If it's an SPA shell, render with headless browser
 		if (useBrowser && isSPAShell(text)) {
 			try {
 				if (!isBrowserLaunched()) await launchBrowser()
-				// Use the original URL (which may contain hash for hash-routed SPAs)
 				const renderUrl = url.includes("#") ? url : finalUrl
 				const rendered = await renderPage(renderUrl, { timeout: 20000 })
 				if (rendered) {
 					text = rendered.html
+					media = extractMedia(text, finalUrl)
 				}
 			} catch {}
+		} else {
+			media = extractMedia(text, finalUrl)
 		}
 
 		const cleaned = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
 
 		try {
 			const result = await withTimeout(Defuddle(cleaned, finalUrl, { markdown: true }), DEFUDDLE_TIMEOUT)
-			self.postMessage({ ok: true, url: finalUrl, title: result.title || "", content: result.content || "" })
+			self.postMessage({ ok: true, url: finalUrl, title: result.title || "", content: result.content || "", media })
 		} catch {
 			const { title, content } = fallbackExtract(cleaned)
-			self.postMessage({ ok: true, url: finalUrl, title, content })
+			self.postMessage({ ok: true, url: finalUrl, title, content, media })
 		}
 	} catch (err: any) {
 		self.postMessage({ ok: false, error: err?.message ?? "Unknown error" })
