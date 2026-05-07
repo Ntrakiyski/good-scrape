@@ -32,3 +32,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# scraped output
+lex_chapters/
+lex_single_page/
+lex*.md
+www.gloriarusenova.com/
+clerk.com/
+developer.olx.bg/
+docs/
+react.dev/
