@@ -1,9 +1,9 @@
-# webpull
+# webpull-cli
 
 Pull any public docs site into local markdown files.
 
 ```
-$ webpull https://docs.example.com
+$ webpull-cli https://docs.example.com
 
   ⚡ webpull · 16 workers
   docs.example.com → ./docs.example.com
@@ -18,13 +18,15 @@ $ webpull https://docs.example.com
 ## Install
 
 ```bash
-bun install -g webpull
+npm install -g webpull-cli
+# or
+bun install -g webpull-cli
 ```
 
 ## Usage
 
 ```
-webpull <url> [options]
+webpull-cli <url> [options]
 
 Options:
   -o, --out <dir>   Output directory (default: ./<hostname>)
@@ -34,11 +36,11 @@ Options:
 ## Examples
 
 ```bash
-# Pull React docs
-webpull https://react.dev/reference
+# Pull docs
+webpull-cli https://react.dev
 
 # Custom output dir, limit to 100 pages
-webpull https://docs.python.org -o ./python-docs -m 100
+webpull-cli https://docs.python.org -o ./python-docs -m 100
 ```
 
 ## How it works
@@ -66,3 +68,7 @@ url: "https://docs.example.com/getting-started"
 ## License
 
 MIT
+
+---
+
+Source: [github.com/Ntrakiyski/webpull-cli](https://github.com/Ntrakiyski/webpull-cli)
