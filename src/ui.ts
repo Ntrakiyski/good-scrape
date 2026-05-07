@@ -17,8 +17,8 @@ export interface UIState {
 	recentFiles: string[]
 }
 
-export function createUI(url: string, out: string, workerCount: number) {
-	process.stderr.write(`  ${B}⚡ webpull${RST} ${D}·${RST} ${Y}${workerCount}${RST} ${D}workers${RST}\n`)
+export function createUI(url: string, out: string, concurrency: number, mode: "workers" | "engine" = "workers") {
+	process.stderr.write(`  ${B}⚡ webpull${RST} ${D}·${RST} ${Y}${concurrency}${RST} ${D}${mode}${RST}\n`)
 	process.stderr.write(`  ${D}${url} → ${out}${RST}\n\n`)
 
 	// Reserve 5 lines
@@ -35,11 +35,13 @@ export function createUI(url: string, out: string, workerCount: number) {
 			? `${Y}${SPINNER[frame % SPINNER.length]}${RST}`
 			: `${G}✓${RST}`
 
-		// Dots — compact, no spaces
-		const dots = state.workerStates
-			.slice(0, Math.min(workerCount, 32))
-			.map((s) => (s === "busy" ? `${Y}●${RST}` : `${D}·${RST}`))
-			.join("")
+		// Status line — dots for workers, activity indicator for engine
+		const hasActivity = state.workerStates.length > 0
+			? state.workerStates.some((s) => s === "busy")
+			: state.ok + state.err < state.total
+		const statusLine = hasActivity
+			? `${CLEAR}  ${Y}●${RST} ${D}processing...${RST}`
+			: `${CLEAR}  ${G}●${RST} ${D}done${RST}`
 
 		// Progress bar
 		const barWidth = Math.min(20, cols - 35)
@@ -59,7 +61,7 @@ export function createUI(url: string, out: string, workerCount: number) {
 		const progressLine = `${CLEAR}  ${spin} ${bar} ${B}${pct}%${RST} ${D}${state.ok}/${state.total}${RST} ${D}·${RST} ${Y}${pps}${RST}${D}p/s${RST} ${D}·${RST} ${D}${state.elapsed.toFixed(1)}s${RST}`
 
 		// Single atomic write: move up 5, rewrite all 5 lines
-		process.stderr.write(`${UP5}${CLEAR}  ${dots}\n${files[0]}\n${files[1]}\n${files[2]}\n${progressLine}\n`)
+		process.stderr.write(`${UP5}${statusLine}\n${files[0]}\n${files[1]}\n${files[2]}\n${progressLine}\n`)
 	}
 
 	const finish = () => {}

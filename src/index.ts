@@ -5,16 +5,19 @@ import { Effect } from "effect"
 import { frontmatter } from "./convert"
 import { isSPAShell } from "./detect"
 import { discover } from "./discover"
-import { WorkerPool } from "./pool"
 import { closeBrowser } from "./renderer"
 import { createUI } from "./ui"
 import { write } from "./write"
+import { crawlWithEngine } from "./engine-cli"
 
 interface Config {
 	url: string
 	out: string
 	max: number
 	format?: "json" | "md"
+	proxies: string[]
+	respectRobotsTxt: boolean
+	cacheDir?: string
 }
 
 const parseArgs = (args: string[]): Config => {
@@ -24,9 +27,12 @@ const parseArgs = (args: string[]): Config => {
 
   Usage:  webpull-cli <url> [options]
 
-    -o, --out <dir>    Output directory (default: ./<hostname>)
-    -m, --max <n>      Max pages (default: 500)
-    -f, --format <fmt> Output format: json or md (prints to terminal; writes to file if >10k chars)
+    -o, --out <dir>       Output directory (default: ./<hostname>)
+    -m, --max <n>         Max pages (default: 500)
+    -f, --format <fmt>    Output format: json or md (prints to terminal; writes to file if >10k chars)
+    -p, --proxy <url>     Proxy URL (can repeat for rotation)
+    --respect-robots      Respect robots.txt rules
+    --cache <dir>         Dev mode cache directory
 `)
 		process.exit(0)
 	}
@@ -44,6 +50,9 @@ const parseArgs = (args: string[]): Config => {
 
 	let out = `./${url.hostname}`
 	let max = 500
+	const proxies: string[] = []
+	let respectRobotsTxt = false
+	let cacheDir: string | undefined
 
 	let format: Config["format"]
 
@@ -64,17 +73,24 @@ const parseArgs = (args: string[]): Config => {
 				process.exit(1)
 			}
 			i++
+		} else if (("-p" === arg || "--proxy" === arg) && next) {
+			proxies.push(next)
+			i++
+		} else if ("--respect-robots" === arg) {
+			respectRobotsTxt = true
+		} else if ("--cache" === arg && next) {
+			cacheDir = resolve(next)
+			i++
 		}
 	}
 
-	return { url: url.href, out: resolve(out), max, format }
+	return { url: url.href, out: resolve(out), max, format, proxies, respectRobotsTxt, cacheDir }
 }
 
 const program = Effect.gen(function* () {
 	const config = parseArgs(process.argv.slice(2))
 	const t0 = performance.now()
-	let workerCount = Math.max(8, cpus().length * 2)
-	let pool: WorkerPool | null = null
+	let concurrency = Math.max(8, cpus().length * 2)
 
 	process.stderr.write(`\n  \x1b[1m⚡ webpull\x1b[0m \x1b[90m· discovering pages...\x1b[0m\n\n`)
 
@@ -85,115 +101,98 @@ const program = Effect.gen(function* () {
 			process.exit(1)
 		}
 
-		// Detect if we need browser rendering for content extraction
 		const sampleHtml = yield* Effect.tryPromise({
 			try: () => fetch(config.url, { redirect: "follow" }).then((r) => r.text()),
 			catch: () => new Error("Failed to detect SPA"),
 		}).pipe(Effect.catchAll(() => Effect.succeed("")))
 		const needsBrowser = isSPAShell(sampleHtml)
 		if (needsBrowser) {
-			// Limit concurrency to avoid spawning too many Chromium instances
-			workerCount = Math.min(workerCount, 4)
+			concurrency = Math.min(concurrency, 4)
 		}
-
-		const activePool = new WorkerPool(workerCount)
-		if (needsBrowser) activePool.useBrowser = true
-		pool = activePool
 
 		const tDisc = performance.now()
 		const total = urls.length
-		const ui = createUI(config.url, config.out, workerCount)
+		const ui = createUI(config.url, config.out, concurrency, "engine")
 
 		let ok = 0
 		let err = 0
 		const recentFiles: string[] = []
-		const workerStates = new Array<"idle" | "busy">(workerCount).fill("idle")
-		const workerMap = new Map<number, number>()
-		let nextSlot = 0
 		let lastRender = 0
 
 		const tick = () => {
 			const now = performance.now()
 			if (now - lastRender < 80) return
 			lastRender = now
-			ui.render({ total, ok, err, elapsed: (now - tDisc) / 1000, workerStates, recentFiles })
+			ui.render({ total, ok, err, elapsed: (now - tDisc) / 1000, workerStates: [], recentFiles })
 		}
 
 		yield* Effect.tryPromise(() =>
-			activePool.pullAll(
-				urls,
-				(idx) => {
-					const slot = nextSlot++ % workerCount
-					workerMap.set(idx, slot)
-					workerStates[slot] = "busy"
-					tick()
-				},
-				(result, idx) => {
-					const slot = workerMap.get(idx) ?? 0
-					workerStates[slot] = "idle"
-					workerMap.delete(idx)
+			crawlWithEngine(urls, {
+				concurrency,
+				useBrowser: needsBrowser,
+				proxies: config.proxies,
+				respectRobotsTxt: config.respectRobotsTxt,
+				cacheDir: config.cacheDir,
+				onItem: (data) => {
+					ok++
+					const { url: finalUrl, title, markdown, media } = data
 
-					if (result.ok) {
-						ok++
-						const finalUrl = result.url ?? urls[idx]!
-						const title = result.title || new URL(finalUrl).pathname
-						const content = result.content ?? ""
-						const media = result.media ?? []
-
-						let fullMd = frontmatter(title, finalUrl) + content
-						if (media.length > 0) {
-							fullMd += "\n\n---\n\n### Page Assets\n\n"
-							for (const item of media) {
-								const label = item.alt || (item.type === "video" ? "video" : item.url)
-								fullMd += `- [${label}](${item.url})\n`
-							}
+					let fullMd = frontmatter(title, finalUrl) + markdown
+					if (media.length > 0) {
+						fullMd += "\n\n---\n\n### Page Assets\n\n"
+						for (const item of media) {
+							const label =
+								item.alt || (item.type === "video" ? "video" : item.url)
+							fullMd += `- [${label}](${item.url})\n`
 						}
+					}
 
-						const page = {
-							url: finalUrl,
-							title,
-							markdown: fullMd,
-						}
+					const page = { url: finalUrl, title, markdown: fullMd }
 
-						const parsedUrl = new URL(finalUrl)
-						let filepath = parsedUrl.pathname
-						// Handle hash-routed URLs (e.g. #/page/export -> page/export)
-						if (parsedUrl.hash && parsedUrl.hash.length > 1) {
-							filepath = parsedUrl.hash.replace(/^#\/?/, "/")
-						}
-						if (filepath.endsWith("/")) filepath += "index"
-						filepath = filepath.replace(/\.html?$/, "").replace(/^\//, "")
-						if (!filepath.endsWith(".md")) filepath += ".md"
-						if (config.format && fullMd.length <= 50_000) {
-							if (config.format === "json") {
-								process.stdout.write(`${JSON.stringify({ title, url: finalUrl, content, media })}\n`)
-							} else {
-								process.stdout.write(`${fullMd}\n\n---\n\n`)
-							}
+					const parsedUrl = new URL(finalUrl)
+					let filepath = parsedUrl.pathname
+					if (parsedUrl.hash && parsedUrl.hash.length > 1) {
+						filepath = parsedUrl.hash.replace(/^#\/?/, "/")
+					}
+					if (filepath.endsWith("/")) filepath += "index"
+					filepath = filepath.replace(/\.html?$/, "").replace(/^\//, "")
+					if (!filepath.endsWith(".md")) filepath += ".md"
+
+					if (config.format && fullMd.length <= 50_000) {
+						if (config.format === "json") {
+							process.stdout.write(
+								`${JSON.stringify({ title, url: finalUrl, content: markdown, media })}\n`,
+							)
 						} else {
-							recentFiles.push(filepath)
-							if (config.format) {
-								Effect.runPromise(
-									write(page, config.out).pipe(
-										Effect.map((path) => {
-											process.stderr.write(`  \x1b[90m→\x1b[0m ${path} \x1b[33m(file too large for terminal)\x1b[0m\n`)
-											return path
-										}),
-									),
-								)
-							} else {
-								Effect.runPromise(write(page, config.out))
-							}
+							process.stdout.write(`${fullMd}\n\n---\n\n`)
 						}
 					} else {
-						err++
+						recentFiles.push(filepath)
+						if (config.format) {
+							Effect.runPromise(
+								write(page, config.out).pipe(
+									Effect.map((path) => {
+										process.stderr.write(
+											`  \x1b[90m→\x1b[0m ${path} \x1b[33m(file too large for terminal)\x1b[0m\n`,
+										)
+										return path
+									}),
+								),
+							)
+						} else {
+							Effect.runPromise(write(page, config.out))
+						}
 					}
 					tick()
 				},
-			),
+				onError: () => {
+					err++
+					tick()
+				},
+			}),
 		)
 
-		ui.render({ total, ok, err, elapsed: (performance.now() - tDisc) / 1000, workerStates, recentFiles })
+		ui.render({ total, ok, err, elapsed: (performance.now() - tDisc) / 1000, workerStates: [], recentFiles })
 		ui.finish()
 
 		const elapsed = ((performance.now() - t0) / 1000).toFixed(1)
@@ -205,7 +204,7 @@ const program = Effect.gen(function* () {
 		if (err) process.stderr.write(`  \x1b[31m${err} failed\x1b[0m\n`)
 		process.stderr.write("\n")
 	} finally {
-		pool?.terminate()
+		// engine-cli handles browser session cleanup internally
 	}
 })
 

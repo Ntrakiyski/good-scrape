@@ -15,6 +15,9 @@ bun run src/index.ts <url>        # Run the CLI directly
 bun run bin/webpull <url>          # Same (entrypoint wrapper)
 bun run src/index.ts <url> -f json  # Print JSON to terminal (file if >10k chars)
 bun run src/index.ts <url> -f md    # Print markdown to terminal (file if >10k chars)
+bun run src/index.ts <url> --respect-robots  # Respect robots.txt
+bun run src/index.ts <url> --cache <dir>     # Dev mode cache for faster iteration
+bun run src/index.ts <url> -p http://proxy:8080  # Proxy (repeat for rotation)
 ```
 
 No build, no test, no typecheck scripts in package.json. To typecheck: `bun run tsc --noEmit`.
@@ -44,6 +47,7 @@ No build, no test, no typecheck scripts in package.json. To typecheck: `bun run 
 | File | Purpose |
 |---|---|
 | `src/index.ts` | CLI entrypoint, args parsing, main Effect loop |
+| `src/engine-cli.ts` | Bridge: CrawlerEngine → CLI (defuddle, media, SPA fallback) |
 | `src/worker.ts` | Per-page fetch, defuddle conversion, SPA rendering |
 | `src/pool.ts` | Bun Worker thread pool |
 | `src/discover.ts` | URL discovery strategies |
@@ -54,3 +58,13 @@ No build, no test, no typecheck scripts in package.json. To typecheck: `bun run 
 | `src/routes.ts` | JS bundle route extraction regex |
 | `src/detect.ts` | SPA shell detection heuristics |
 | `src/ua.ts` | User agent rotation |
+| `src/crawler/engine.ts` | CrawlerEngine — main crawl loop, checkpoint, session routing |
+| `src/crawler/scheduler.ts` | Priority queue + fingerprint dedup |
+| `src/crawler/session.ts` | Session interface, HttpSession (with proxy support), SessionManager |
+| `src/crawler/browser-session.ts` | BrowserSession wrapping Playwright chromium |
+| `src/crawler/types.ts` | CrawlRequest, CrawlResponse, CrawlConfig, CrawlStats, CrawlResult |
+| `src/crawler/checkpoint.ts` | CheckpointManager — atomic disk save/load for pause/resume |
+| `src/crawler/cache.ts` | DevCache — disk-based response cache keyed by SHA-256 fingerprint |
+| `src/crawler/robots.ts` | RobotsTxt — robots.txt parser (allow/disallow, crawl-delay, sitemaps) |
+| `src/crawler/proxy.ts` | ProxyRotator — round-robin proxy assignment |
+| `src/crawler/index.ts` | Public re-exports for the crawler package |
