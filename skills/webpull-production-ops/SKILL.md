@@ -8,7 +8,7 @@ description: Use when preparing webpull for GitHub, npm publishing, Docker runs,
 ## Available Interfaces
 
 - Local CLI: run with Bun, for example `bun run bin/webpull https://docs.example.com -o ./output -m 100`.
-- Installed CLI: the npm package is `webpull-cli`; the installed command is `webpull`.
+- Installed CLI: not available yet because `webpull-cli` is not currently published on npm.
 - Docker service: running the image with no command starts the HTTP service on port `3000`.
 - Docker CLI: pass `webpull` as the first container argument.
 - Hosted API: deployed service exposes `GET /health`, `GET /`, and capped `POST /api/pull`.

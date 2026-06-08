@@ -13,3 +13,17 @@ Run package-manager installs and checks sequentially when they share `node_modul
 
 Example check:
 Finish `npm ci` or `bun install` first, then run `bun run check` in a separate step.
+
+## 2026-06-08 - Verify package availability before documenting install commands
+
+Mistake:
+Left `npm install -g webpull-cli` in the README even though the package is not currently published on npm.
+
+Why it happened:
+I treated package metadata and publish intent as enough evidence for user-facing install instructions.
+
+Rule for next time:
+Before documenting an external package install path, verify the package is currently available in the registry or clearly label the command as future/pending.
+
+Example check:
+Run `npm view <package> name version --json` before adding or keeping `npm install` instructions.

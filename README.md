@@ -24,28 +24,39 @@ Install Chromium when you expect JavaScript-rendered pages:
 npx playwright install chromium
 ```
 
-## Install
+## Use The Hosted API
 
-Global package install:
+No install is needed for the deployed service. Send a JSON request to the hosted API:
 
 ```bash
-npm install -g webpull-cli
-webpull https://docs.example.com
+curl -X POST https://good-scrape.159.69.35.245.sslip.io/api/pull \
+  -H "content-type: application/json" \
+  -d '{"url":"https://example.com","max":5,"respectRobotsTxt":true}'
 ```
 
-Local repo usage:
+The hosted API returns JSON with discovered pages and Markdown content. Hosted requests are capped at 25 pages.
+
+## Run From Source
+
+If you have this repository checked out, the CLI command that works right now is:
 
 ```bash
 bun install
+bun run bin/webpull https://docs.example.com
+```
+
+You can also run the TypeScript entrypoint directly:
+
+```bash
 bun run src/index.ts https://docs.example.com
 ```
 
-The published package name is `webpull-cli`; the installed command is `webpull`.
+Do not use `npm install -g webpull-cli` yet. The package is not currently published on npm.
 
 ## CLI Usage
 
 ```bash
-webpull <url> [options]
+bun run bin/webpull <url> [options]
 ```
 
 Options:
@@ -65,37 +76,37 @@ Options:
 Pull a documentation site:
 
 ```bash
-webpull https://react.dev -m 100 -o ./react-docs
+bun run bin/webpull https://react.dev -m 100 -o ./react-docs
 ```
 
 Print newline-delimited JSON:
 
 ```bash
-webpull https://docs.example.com -f json
+bun run bin/webpull https://docs.example.com -f json
 ```
 
 Print Markdown:
 
 ```bash
-webpull https://docs.example.com -f md
+bun run bin/webpull https://docs.example.com -f md
 ```
 
 Respect robots.txt:
 
 ```bash
-webpull https://docs.example.com --respect-robots
+bun run bin/webpull https://docs.example.com --respect-robots
 ```
 
 Use a development cache:
 
 ```bash
-webpull https://docs.example.com --cache .webpull-cache
+bun run bin/webpull https://docs.example.com --cache .webpull-cache
 ```
 
 Rotate proxies:
 
 ```bash
-webpull https://docs.example.com \
+bun run bin/webpull https://docs.example.com \
   -p http://proxy1:8080 \
   -p http://proxy2:8080
 ```
@@ -129,7 +140,7 @@ For terminal formats, pages larger than 50,000 characters are written to files i
 Use `--ecommerce` for WooCommerce-style sites that expose a sitemap index with `product-sitemap*.xml` entries.
 
 ```bash
-webpull https://shop.example.com --ecommerce -m 500 -o ./shop-export
+bun run bin/webpull https://shop.example.com --ecommerce -m 500 -o ./shop-export
 ```
 
 In ecommerce mode:
