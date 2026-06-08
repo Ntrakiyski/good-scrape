@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs"
-import { mkdir, readFile, rename, writeFile, unlink } from "node:fs/promises"
-import { join, relative } from "node:path"
 import { createHash } from "node:crypto"
+import { existsSync } from "node:fs"
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
+import { join, relative } from "node:path"
 import type { CrawlResponse } from "./types"
 
 const CACHE_VERSION = 1
@@ -89,16 +89,25 @@ export class DevCache {
 			await mkdir(subdir, { recursive: true })
 		}
 
+		const bytes = new Uint8Array(response.body)
+		const chunkSize = 8192
+		const binaryChunks: string[] = []
+		for (let i = 0; i < bytes.length; i += chunkSize) {
+			const chunk = bytes.subarray(i, i + chunkSize)
+			let s = ""
+			for (let j = 0; j < chunk.length; j++) s += String.fromCharCode(chunk[j]!)
+			binaryChunks.push(s)
+		}
 		const entry: CacheEntry = {
 			version: CACHE_VERSION,
 			url: response.url,
 			status: response.status,
 			headers: response.headers,
-			bodyBase64: btoa(String.fromCharCode(...new Uint8Array(response.body))),
+			bodyBase64: btoa(binaryChunks.join("")),
 			timestamp: Date.now(),
 		}
 
-		const tmp = path + ".tmp"
+		const tmp = `${path}.tmp`
 		await writeFile(tmp, JSON.stringify(entry), "utf-8")
 		await rename(tmp, path)
 	}

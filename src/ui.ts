@@ -36,17 +36,20 @@ export function createUI(url: string, out: string, concurrency: number, mode: "w
 			: `${G}✓${RST}`
 
 		// Status line — dots for workers, activity indicator for engine
-		const hasActivity = state.workerStates.length > 0
-			? state.workerStates.some((s) => s === "busy")
-			: state.ok + state.err < state.total
+		const hasActivity =
+			state.workerStates.length > 0 ? state.workerStates.some((s) => s === "busy") : state.ok + state.err < state.total
 		const statusLine = hasActivity
 			? `${CLEAR}  ${Y}●${RST} ${D}processing...${RST}`
 			: `${CLEAR}  ${G}●${RST} ${D}done${RST}`
 
 		// Progress bar
-		const barWidth = Math.min(20, cols - 35)
-		const filled = Math.round(((state.ok + state.err) / state.total) * barWidth)
-		const bar = `${G}${"█".repeat(filled)}${RST}${D}${"░".repeat(barWidth - filled)}${RST}`
+		const barWidth = Math.max(0, Math.min(20, cols - 35))
+		const frac = state.total > 0 ? (state.ok + state.err) / state.total : 0
+		const filled = Math.round(frac * barWidth)
+		const bar =
+			barWidth > 0
+				? `${G}${"█".repeat(filled)}${RST}${D}${"░".repeat(barWidth - filled)}${RST}`
+				: `${G}${"█".repeat(filled)}${RST}`
 
 		// Recent files — last 3, truncated
 		const maxFileLen = cols - 8

@@ -25,6 +25,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # caches
 .eslintcache
 .cache
+.webpull-cache/
 *.tsbuildinfo
 
 # IntelliJ based IDEs
@@ -42,3 +43,14 @@ clerk.com/
 developer.olx.bg/
 docs/
 react.dev/
+topautoshop.bg/
+topautoshop-new/
+
+# local debug/run artifacts
+_debug*.mjs
+_categorize*.mjs
+_categories*.json
+_categories*.mjs
+_cats.mjs
+_tojson.mjs
+credentials.json

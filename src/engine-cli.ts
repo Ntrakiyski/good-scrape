@@ -1,22 +1,25 @@
 import { Defuddle } from "defuddle/node"
 import { parseHTML } from "linkedom"
-import { Scheduler } from "./crawler/scheduler"
-import { CrawlerEngine } from "./crawler/engine"
-import { HttpSession, SessionManager } from "./crawler/session"
 import { BrowserSession } from "./crawler/browser-session"
+import { CrawlerEngine } from "./crawler/engine"
+import { Scheduler } from "./crawler/scheduler"
+import { HttpSession, SessionManager } from "./crawler/session"
 import {
+	type CrawlConfig,
 	type CrawlItem,
+	CrawlRequest,
 	type CrawlResponse,
 	type CrawlStats,
-	type CrawlConfig,
 	defaultConfig,
 } from "./crawler/types"
 import { isSPAShell } from "./detect"
-import { getHeaders } from "./ua"
 
 const DEFUDDLE_TIMEOUT = 5_000
 const MARKDOWN_SIGNAL = /^(#{1,6}\s|[-*]\s|\d+\.\s|```|>\s|\[.+\]\(.+\))/m
 const STYLE_SCRIPT_RE = /<style[^>]*>[\s\S]*?<\/style>|<script[^>]*>[\s\S]*?<\/script>/gi
+const LINK_RE = /<a\s[^>]*href=["']([^"']+)["']/gi
+const IGNORED_EXT = /\.(png|jpg|jpeg|gif|svg|webp|ico|pdf|zip|tar|gz|mp[34]|woff2?|ttf|eot|css|js|json|xml|rss|atom)$/i
+const MAX_FOLLOW_PER_PAGE = 8
 
 interface MediaRef {
 	url: string
@@ -38,10 +41,7 @@ interface CrawlResultData {
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-	return Promise.race([
-		promise,
-		new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
-	])
+	return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))])
 }
 
 function extractMedia(html: string, baseUrl: string): MediaRef[] {
@@ -68,11 +68,7 @@ function extractMedia(html: string, baseUrl: string): MediaRef[] {
 	}
 
 	for (const el of document.querySelectorAll("img[src], img[data-src]")) {
-		add(
-			el.getAttribute("src") || el.getAttribute("data-src") || "",
-			"image",
-			el.getAttribute("alt") || undefined,
-		)
+		add(el.getAttribute("src") || el.getAttribute("data-src") || "", "image", el.getAttribute("alt") || undefined)
 	}
 
 	for (const el of document.querySelectorAll("video[src]")) {
@@ -94,31 +90,41 @@ function extractMedia(html: string, baseUrl: string): MediaRef[] {
 function fallbackExtract(html: string) {
 	const { document } = parseHTML(html)
 	const title = document.querySelector("title")?.textContent || ""
-	const el =
-		document.querySelector("main") ??
-		document.querySelector("article") ??
-		document.querySelector("body")
+	const el = document.querySelector("main") ?? document.querySelector("article") ?? document.querySelector("body")
 	return {
 		title,
 		content: el?.textContent?.replace(/\n{3,}/g, "\n\n").trim() ?? "",
 	}
 }
 
-async function convertToMarkdown(
-	html: string,
-	url: string,
-): Promise<{ title: string; content: string }> {
+async function convertToMarkdown(html: string, url: string): Promise<{ title: string; content: string }> {
 	const cleaned = html.replace(STYLE_SCRIPT_RE, "")
 
 	try {
-		const result = await withTimeout(
-			Defuddle(cleaned, url, { markdown: true }),
-			DEFUDDLE_TIMEOUT,
-		)
+		const result = await withTimeout(Defuddle(cleaned, url, { markdown: true }), DEFUDDLE_TIMEOUT)
 		return { title: result.title || "", content: result.content || "" }
 	} catch {
 		return fallbackExtract(cleaned)
 	}
+}
+
+function extractLinks(html: string, baseUrl: string, hostname: string, seen: Set<string>): string[] {
+	const out: string[] = []
+	for (const [, href] of html.matchAll(LINK_RE)) {
+		if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:")) continue
+		try {
+			const resolved = new URL(href, baseUrl)
+			if (resolved.hostname !== hostname) continue
+			resolved.hash = ""
+			const key = resolved.href.replace(/\/$/, "")
+			if (IGNORED_EXT.test(resolved.pathname)) continue
+			if (seen.has(key)) continue
+			seen.add(key)
+			out.push(resolved.href)
+			if (out.length >= MAX_FOLLOW_PER_PAGE) break
+		} catch {}
+	}
+	return out
 }
 
 export interface CrawlOptions {
@@ -131,10 +137,7 @@ export interface CrawlOptions {
 	onError?: (url: string, error: string) => void
 }
 
-export async function crawlWithEngine(
-	seedUrls: string[],
-	options: CrawlOptions = {},
-): Promise<CrawlResultData> {
+export async function crawlWithEngine(seedUrls: string[], options: CrawlOptions = {}): Promise<CrawlResultData> {
 	const scheduler = new Scheduler()
 	const sessionManager = new SessionManager()
 	const httpSession = new HttpSession("http", options.proxies)
@@ -163,47 +166,98 @@ export async function crawlWithEngine(
 		},
 	})
 
-	engine.registerCallback("parse", async function* (response: CrawlResponse) {
-		const ct = response.headers["content-type"] ?? ""
-		let text = response.text()
-		let finalUrl = response.url
+	const linkSeen = new Set<string>()
 
-		if (
-			ct.includes("text/markdown") ||
-			(!ct.includes("text/html") && MARKDOWN_SIGNAL.test(text))
-		) {
-			const title =
-				text.match(/^#\s+(.+)$/m)?.[1]?.trim() || new URL(finalUrl).pathname
+	async function* convertAndEmit(
+		response: CrawlResponse,
+		followLinks: boolean,
+	): AsyncGenerator<CrawlItem | CrawlRequest> {
+		try {
+			const ct = response.headers["content-type"] ?? ""
+			let text: string
+			let finalUrl: string
+			try {
+				text = response.text()
+				finalUrl = response.url
+			} catch {
+				text = ""
+				finalUrl = response.url
+			}
+
+			if (ct.includes("text/markdown") || (!ct.includes("text/html") && MARKDOWN_SIGNAL.test(text))) {
+				const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() || new URL(finalUrl).pathname
+				yield { url: finalUrl, title, markdown: text, media: [] } satisfies CrawlItem
+				return
+			}
+
+			if (isSPAShell(text) && browserSession) {
+				try {
+					const browserResp = await browserSession.fetch(response.request)
+					if (browserResp.status === 200 && browserResp.body.length > 0) {
+						text = browserResp.text()
+						finalUrl = browserResp.url
+					}
+				} catch {
+					// fall through to use original HTML
+				}
+			}
+
+			if (followLinks) {
+				let hostname: string
+				try {
+					hostname = new URL(finalUrl).hostname
+				} catch {
+					hostname = ""
+				}
+				const links = extractLinks(text, finalUrl, hostname, linkSeen)
+				for (const link of links) {
+					yield new CrawlRequest({
+						url: link,
+						sid: response.request.sid,
+						callback: "leaf",
+						priority: -1,
+						meta: { parent: finalUrl },
+					})
+				}
+			}
+
+			let pageMedia: MediaRef[] = []
+			try {
+				pageMedia = extractMedia(text, finalUrl)
+			} catch {
+				// best-effort
+			}
+
+			let pageTitle: string
+			let pageContent: string
+			try {
+				const { title, content } = await convertToMarkdown(text, finalUrl)
+				pageTitle = title
+				pageContent = typeof content === "string" ? content : String(content ?? "")
+			} catch {
+				const fallback = fallbackExtract(text)
+				pageTitle = fallback.title
+				pageContent = fallback.content
+			}
+
 			yield {
 				url: finalUrl,
-				title,
-				markdown: text,
-				media: [],
+				title: pageTitle || new URL(finalUrl).pathname,
+				markdown: pageContent,
+				media: pageMedia,
 			} satisfies CrawlItem
-			return
+		} catch (err) {
+			const errorUrl = response?.url ?? "unknown"
+			process.stderr.write(`  \x1b[31m✗\x1b[0m convertAndEmit error for ${errorUrl}: ${err}\n`)
 		}
+	}
 
-		if (isSPAShell(text) && browserSession) {
-			try {
-				const browserResp = await browserSession.fetch(response.request)
-				if (browserResp.status === 200 && browserResp.body.length > 0) {
-					text = browserResp.text()
-					finalUrl = browserResp.url
-				}
-			} catch {
-				// fall through to use original HTML
-			}
-		}
+	engine.registerCallback("parse", async function* (response: CrawlResponse) {
+		yield* convertAndEmit(response, true)
+	})
 
-		const media = extractMedia(text, finalUrl)
-		const { title, content } = await convertToMarkdown(text, finalUrl)
-
-		yield {
-			url: finalUrl,
-			title: title || new URL(finalUrl).pathname,
-			markdown: content,
-			media,
-		} satisfies CrawlItem
+	engine.registerCallback("leaf", async function* (response: CrawlResponse) {
+		yield* convertAndEmit(response, false)
 	})
 
 	const result = await engine.crawl(seedUrls, {

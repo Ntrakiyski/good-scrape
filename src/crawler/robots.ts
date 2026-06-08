@@ -15,10 +15,8 @@ export class RobotsTxt {
 	private rules: RobotRule[]
 	readonly sitemaps: string[]
 	readonly defaultDelay: number
-	private domain: string
 
-	constructor(text: string, domain: string) {
-		this.domain = domain
+	constructor(text: string, _domain: string) {
 		this.rules = []
 		this.sitemaps = []
 		this.defaultDelay = 0
@@ -92,7 +90,7 @@ export class RobotsTxt {
 			const value = trimmed.slice(colonIdx + 1).trim()
 
 			if (field === "user-agent") {
-				if (current && current.userAgent) {
+				if (current?.userAgent) {
 					rules.push(current)
 				}
 				current = { userAgent: value, allow: [], disallow: [], crawlDelay: 0 }
@@ -110,7 +108,7 @@ export class RobotsTxt {
 			}
 		}
 
-		if (current && current.userAgent) {
+		if (current?.userAgent) {
 			rules.push(current)
 		}
 

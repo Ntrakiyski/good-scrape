@@ -1,70 +1,125 @@
-# webpull — Agent Guide
+# webpull-cli — Agent Guide
 
-## Runtime & toolchain
+## Runtime & Toolchain
 
-- **Bun runtime** (not Node). Run with `bun`, not `node`.
-- **TypeScript only** — no build step (`tsconfig.json: noEmit`, `module: Preserve`, `verbatimModuleSyntax: true`)
-- **Biome v2** for lint+format. Config at `biome.json`: tab indent, double quotes, no semicolons, `noUnusedVariables`/`noUnusedImports` as errors.
-- **No test framework** installed. No `bun test` config. Verify by running the CLI manually.
-- **package.json is for npm publishing only** (CI runs `npm ci` + `npm publish`). Local dev uses bun.
+- **Runtime**: Bun. Run local CLI commands with `bun`, not `node`.
+- **Language**: TypeScript only. There is no emitted build artifact; `tsconfig.json` uses `noEmit`, `module: Preserve`, and `verbatimModuleSyntax`.
+- **Formatting/linting**: Biome v2. Config uses tab indentation, double quotes, no semicolons, and treats unused imports/variables as errors.
+- **Tests**: No full test framework is configured. `bun run test` is a CLI help smoke test.
+- **Validation**: `npm run check` and `bun run check` both run lint, typecheck, and the smoke test.
+- **SPA support**: Playwright Chromium is required for JavaScript-rendered sites.
 
-## Commands
+## Common Commands
 
 ```bash
-bun run src/index.ts <url>        # Run the CLI directly
-bun run bin/webpull <url>          # Same (entrypoint wrapper)
-bun run src/index.ts <url> -f json  # Print JSON to terminal (file if >10k chars)
-bun run src/index.ts <url> -f md    # Print markdown to terminal (file if >10k chars)
-bun run src/index.ts <url> --respect-robots  # Respect robots.txt
-bun run src/index.ts <url> --cache <dir>     # Dev mode cache for faster iteration
-bun run src/index.ts <url> -p http://proxy:8080  # Proxy (repeat for rotation)
+bun install
+bun run check
+bun run lint
+bun run typecheck
+bun run test
+
+bun run src/index.ts <url>
+bun run bin/webpull <url>
+bun run src/index.ts <url> -o ./output -m 100
+bun run src/index.ts <url> -f json
+bun run src/index.ts <url> -f md
+bun run src/index.ts <url> --respect-robots
+bun run src/index.ts <url> --cache .webpull-cache
+bun run src/index.ts <url> -p http://proxy:8080
+bun run src/index.ts <url> --ecommerce
 ```
 
-No build, no test, no typecheck scripts in package.json. To typecheck: `bun run tsc --noEmit`.
+## Docker
+
+The production Dockerfile uses the official Playwright runtime image, installs Bun, installs production dependencies, and runs as `pwuser`.
+
+```bash
+docker build -t webpull-cli .
+docker run --rm -v "$PWD/output:/out" webpull-cli https://docs.example.com -o /out -m 100
+```
+
+Use mounted output directories for production runs. Do not write generated crawl output into the repo.
 
 ## Architecture
 
-- **Entrypoint**: `src/index.ts` (via `bin/webpull` → `import "../src/index.ts"`)
-- **Worker pool**: `src/pool.ts` spawns Bun `Worker` threads from `src/worker.ts`
-- **Discovery** (`src/discover.ts`): sitemap.xml → nav link extraction → link crawling → JS bundle route scan → headless browser render
-- **SPA rendering**: `src/renderer.ts` (Playwright Chromium, lazy-launched, shared across workers). Concurrency capped at 4 when SPA detected.
-- **HTML→Markdown**: `defuddle` (node entry) with 5s timeout, falls back to `linkedom` text extraction
-- **User agents rotate** from 8-value pool (`src/ua.ts`)
-- **Effect-TS** for structured concurrency (`Effect.gen`, `Effect.tryPromise`, `Effect.all`). **Do not** use raw Promise chains — prefer Effect operators.
+- **Entrypoint**: `src/index.ts`
+  - Parses CLI arguments.
+  - Runs discovery.
+  - Selects browser concurrency for SPA shells.
+  - Handles terminal/file output modes.
+  - Handles ecommerce product output and image downloads.
+- **Crawler bridge**: `src/engine-cli.ts`
+  - Adapts `CrawlerEngine` output to CLI page data.
+  - Converts HTML to Markdown with Defuddle and `linkedom` fallback.
+  - Extracts media references and bounded same-host links.
+  - Escalates SPA shells to browser fetches when browser mode is enabled.
+- **Crawler core**: `src/crawler/`
+  - Priority scheduling, fingerprint deduplication, sessions, checkpointing, cache, robots.txt, and proxy rotation.
+- **Discovery**: `src/discover.ts`
+  - Sitemap lookup, navigation extraction, JavaScript route scanning, browser-rendered links, and same-host crawling.
+- **Rendering**: `src/renderer.ts` and `src/crawler/browser-session.ts`
+  - Playwright Chromium rendering for SPAs.
+- **Writing**: `src/write.ts`
+  - URL-to-path mapping with hash-route support and path traversal protection.
+- **Product mode**: `src/product.ts` and `src/download.ts`
+  - Product sitemap detection, product slug extraction, and image downloads.
 
-## Quirks
+## Output Behavior
 
-- **Worker stderr gag**: `src/worker.ts` globally suppresses "Defuddle Error" and "pseudo-class" messages from stderr. Don't be confused by missing error output.
-- **Hash-routed SPAs**: URLs with `#` fragments are preserved. Paths derived from hash (e.g. `#/page/export` → `page/export.md`).
-- **Path traversal protection**: `src/write.ts` validates output paths against directory escape via `relative()` check.
-- **SPA detection** (`src/detect.ts`): checks for root `<div id="root">` (etc.) with `< 200` chars of body text.
-- **Limits**: default 500 pages, adjustable via `-m`.
-- **Playwright**: required for SPA sites. Install with `npx playwright install chromium`.
-- **CI publish**: GitHub Actions on `v*` tags. Uses Node 24, `npm ci` + `npm publish`. Version bumps before tagging.
+- Default output writes Markdown files under `./<hostname>` or `-o <dir>`.
+- Hash-routed SPA URLs are preserved, e.g. `/#/page/export` writes `page/export.md`.
+- Terminal formats use `-f json` or `-f md`.
+- Pages larger than 50,000 characters are written to files instead of stdout.
+- `--ecommerce` writes products as `products/<slug>/<slug>.md`, downloads detected product images, and writes `_index.md`.
 
-## Key files
+## Production Hygiene
+
+- Do not commit crawl outputs, caches, credentials, debug scripts, or OS files.
+- `.gitignore` and `.dockerignore` already cover common generated artifacts.
+- Use `--respect-robots` for third-party production sites unless the operator explicitly chooses otherwise.
+- Use bounded `-m` values for first runs, inspect output, then expand.
+- Use proxies only when the operator owns them and the target site's policy allows them.
+- Keep `tasks/todo.md` updated for non-trivial work and `tasks/lessons.md` for corrections or avoidable mistakes.
+
+## Publishing
+
+- GitHub publish workflow runs on `v*` tags.
+- CI uses Node 24, Bun setup, `npm ci`, `npm run check`, and `npm publish`.
+- `package.json` has a `files` allowlist for package contents: `bin`, `src`, `skills`, `README.md`, and `LICENSE`.
+- Before publishing or pushing, run `npm run check` and inspect `npm pack --dry-run --json`.
+
+## Skills
+
+The `skills/` directory contains concise operating guides:
+
+- `webpull-docs-crawl`
+- `webpull-ecommerce-export`
+- `webpull-production-ops`
+
+Use these for repeatable agent/operator workflows around docs crawls, ecommerce exports, and production deployment.
+
+## Key Files
 
 | File | Purpose |
 |---|---|
-| `src/index.ts` | CLI entrypoint, args parsing, main Effect loop |
-| `src/engine-cli.ts` | Bridge: CrawlerEngine → CLI (defuddle, media, SPA fallback) |
-| `src/worker.ts` | Per-page fetch, defuddle conversion, SPA rendering |
-| `src/pool.ts` | Bun Worker thread pool |
+| `src/index.ts` | CLI entrypoint, args parsing, output routing |
+| `src/engine-cli.ts` | Crawler-to-CLI bridge, conversion, media extraction |
 | `src/discover.ts` | URL discovery strategies |
-| `src/renderer.ts` | Playwright Chromium headless browser |
-| `src/convert.ts` | Page type, frontmatter helper |
-| `src/write.ts` | Markdown file writer with path escape check |
-| `src/ui.ts` | Terminal progress UI (ANSI escapes) |
-| `src/routes.ts` | JS bundle route extraction regex |
-| `src/detect.ts` | SPA shell detection heuristics |
-| `src/ua.ts` | User agent rotation |
-| `src/crawler/engine.ts` | CrawlerEngine — main crawl loop, checkpoint, session routing |
-| `src/crawler/scheduler.ts` | Priority queue + fingerprint dedup |
-| `src/crawler/session.ts` | Session interface, HttpSession (with proxy support), SessionManager |
-| `src/crawler/browser-session.ts` | BrowserSession wrapping Playwright chromium |
-| `src/crawler/types.ts` | CrawlRequest, CrawlResponse, CrawlConfig, CrawlStats, CrawlResult |
-| `src/crawler/checkpoint.ts` | CheckpointManager — atomic disk save/load for pause/resume |
-| `src/crawler/cache.ts` | DevCache — disk-based response cache keyed by SHA-256 fingerprint |
-| `src/crawler/robots.ts` | RobotsTxt — robots.txt parser (allow/disallow, crawl-delay, sitemaps) |
-| `src/crawler/proxy.ts` | ProxyRotator — round-robin proxy assignment |
-| `src/crawler/index.ts` | Public re-exports for the crawler package |
+| `src/write.ts` | Markdown writer and path traversal guard |
+| `src/product.ts` | Ecommerce product sitemap helpers |
+| `src/download.ts` | Image download helpers |
+| `src/ui.ts` | Terminal progress UI |
+| `src/routes.ts` | JavaScript route extraction |
+| `src/detect.ts` | SPA shell detection |
+| `src/renderer.ts` | Shared Playwright browser renderer |
+| `src/crawler/engine.ts` | Main crawl loop |
+| `src/crawler/scheduler.ts` | Priority queue and deduplication |
+| `src/crawler/session.ts` | HTTP session and session manager |
+| `src/crawler/browser-session.ts` | Browser session wrapper |
+| `src/crawler/checkpoint.ts` | Pause/resume checkpoint persistence |
+| `src/crawler/cache.ts` | Disk cache |
+| `src/crawler/robots.ts` | robots.txt parser |
+| `src/crawler/proxy.ts` | Proxy rotation |
+| `Dockerfile` | Production container |
+| `skills/` | Usage guides |
+| `tasks/` | Planning and lessons artifacts |

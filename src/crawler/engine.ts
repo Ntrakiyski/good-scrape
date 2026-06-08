@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { CheckpointManager } from "./checkpoint"
 import { DevCache } from "./cache"
-import { RobotsTxt } from "./robots"
+import { CheckpointManager } from "./checkpoint"
 import { ProxyRotator } from "./proxy"
+import { RobotsTxt } from "./robots"
 import type { Scheduler } from "./scheduler"
 import type { SessionManager } from "./session"
 import {
@@ -17,9 +17,7 @@ import {
 
 const BLOCKED_CODES = new Set([401, 403, 407, 429, 444, 500, 502, 503, 504])
 
-export type CallbackFn = (
-	response: CrawlResponse,
-) => AsyncGenerator<CrawlItem | CrawlRequest | null, void, undefined>
+export type CallbackFn = (response: CrawlResponse) => AsyncGenerator<CrawlItem | CrawlRequest | null, void, undefined>
 
 export interface EngineHooks {
 	onStart?: (resuming: boolean) => Promise<void>
@@ -222,8 +220,7 @@ export class CrawlerEngine {
 					retryReq.retryCount++
 					retryReq.priority--
 					retryReq.dontFilter = true
-					const modified =
-						this.hooks.onRetry?.(retryReq, response) ?? retryReq
+					const modified = this.hooks.onRetry?.(retryReq, response) ?? retryReq
 					await this.scheduler.enqueue(modified)
 					this.stats.retryCount++
 				}
@@ -234,25 +231,15 @@ export class CrawlerEngine {
 			await this.handleResponse(request, response)
 		} catch (err) {
 			this.stats.failedRequests++
-			await this.hooks.onError?.(
-				request,
-				err instanceof Error ? err : new Error(String(err)),
-			)
+			await this.hooks.onError?.(request, err instanceof Error ? err : new Error(String(err)))
 		}
 	}
 
-	private async handleResponse(
-		request: CrawlRequest,
-		response: CrawlResponse,
-	): Promise<void> {
+	private async handleResponse(request: CrawlRequest, response: CrawlResponse): Promise<void> {
 		const callback = this.resolveCallback(request)
 
 		for await (const result of callback(response)) {
-			if (
-				result != null &&
-				typeof result === "object" &&
-				(result as CrawlRequest)._brand === "CrawlRequest"
-			) {
+			if (result != null && typeof result === "object" && (result as CrawlRequest)._brand === "CrawlRequest") {
 				const req = result as CrawlRequest
 				if (this.isDomainAllowed(req)) {
 					if (this.config.respectRobotsTxt) {
@@ -270,9 +257,7 @@ export class CrawlerEngine {
 					this.stats.offsiteFiltered++
 				}
 			} else if (result !== null) {
-				const processed =
-					(await this.hooks.onItem?.(result as CrawlItem)) ??
-					(result as CrawlItem)
+				const processed = (await this.hooks.onItem?.(result as CrawlItem)) ?? (result as CrawlItem)
 				if (processed !== null) {
 					this.stats.itemsScraped++
 					this.onItemCb?.(processed)
@@ -311,9 +296,7 @@ export class CrawlerEngine {
 
 		let paused = false
 
-		const resuming =
-			this.checkpointManager.enabled &&
-			(await this.checkpointManager.load()) !== null
+		const resuming = this.checkpointManager.enabled && (await this.checkpointManager.load()) !== null
 
 		await this.hooks.onStart?.(resuming)
 		await this.sessionManager.start()
@@ -346,9 +329,7 @@ export class CrawlerEngine {
 				if (this.pauseRequested) {
 					if (pending.length === 0 || this.forceStop) {
 						if (this.checkpointManager.enabled) {
-							await this.checkpointManager.save(
-								this.scheduler.snapshot(),
-							)
+							await this.checkpointManager.save(this.scheduler.snapshot())
 							paused = true
 						}
 						if (this.forceStop) {
@@ -413,10 +394,7 @@ export class CrawlerEngine {
 		return { stats: this.stats, paused }
 	}
 
-	crawlEffect(
-		seedUrls: string[],
-		options?: { crawldir?: string },
-	): Effect.Effect<CrawlResult, Error> {
+	crawlEffect(seedUrls: string[], options?: { crawldir?: string }): Effect.Effect<CrawlResult, Error> {
 		return Effect.tryPromise({
 			try: () => this.crawl(seedUrls, options),
 			catch: (e) => new Error(String(e)),

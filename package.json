@@ -4,16 +4,40 @@
 	"description": "Pull any public docs site into local markdown files",
 	"module": "src/index.ts",
 	"type": "module",
+	"license": "MIT",
 	"bin": {
 		"webpull": "bin/webpull"
+	},
+	"files": [
+		"bin",
+		"src",
+		"skills",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"check": "bun run lint && bun run typecheck && bun run test",
+		"format": "biome format --write .",
+		"lint": "biome check .",
+		"test": "bun run src/index.ts --help",
+		"typecheck": "tsc --noEmit"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Ntrakiyski/webpull-cli.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Ntrakiyski/webpull-cli/issues"
+	},
+	"homepage": "https://github.com/Ntrakiyski/webpull-cli#readme",
+	"engines": {
+		"bun": ">=1.1.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
 		"@types/bun": "latest",
-		"@types/node": "^25.6.0"
-	},
-	"peerDependencies": {
-		"typescript": "^5"
+		"@types/node": "^25.6.0",
+		"typescript": "^5.9.3"
 	},
 	"dependencies": {
 		"defuddle": "^0.18.1",

@@ -1,0 +1,93 @@
+# Task Plan
+
+## Goal
+
+Prepare `webpull` for GitHub and Docker-based production use by understanding the project, removing generated/test/debug artifacts, documenting how to use it, adding production deployment assets, and verifying the CLI still works.
+
+## Constraints
+
+- Use Bun for local development and execution.
+- Keep source changes scoped to production readiness and cleanup.
+- Do not remove useful application source, package files, docs, or release automation.
+- Treat untracked crawl outputs, debug scripts, local caches, credentials, and ad hoc conversion files as cleanup candidates unless evidence shows they are required.
+- Avoid destructive git history operations.
+- No test framework is configured; verification must use typecheck, Biome, and manual CLI runs.
+
+## Steps
+
+- [x] Inventory project purpose, runtime, source files, package metadata, and current dirty/untracked files.
+- [x] Identify files/folders that are generated outputs, local-only artifacts, debug scripts, test/use-case runs, or sensitive credentials.
+- [x] Remove unused/generated/test artifacts from the repo working tree.
+- [x] Update ignore rules so crawl outputs, local caches, debug scripts, credentials, and OS files do not return.
+- [x] Add Docker production assets for running the CLI in a container.
+- [x] Create 1-3 project usage skills that explain common ways to operate `webpull`.
+- [x] Update `README.md` for a fresh reader: what the project is, install/run commands, output behavior, Docker usage, production notes, and troubleshooting.
+- [x] Review package metadata and source exports for production readiness.
+- [x] Run Biome, TypeScript typecheck, and a manual CLI smoke test.
+
+## Verification
+
+- [x] Main output checked.
+- [x] Relevant source/data reviewed.
+- [x] Tool results verified.
+- [x] Manual flow checked, if applicable.
+- [x] Edge cases checked.
+- [x] Stakeholder-facing result reviewed.
+- [x] Risks or limitations documented.
+
+## Review
+
+Completed review:
+
+- `webpull` is a Bun TypeScript CLI that crawls public sites and converts pages to Markdown or JSON.
+- Tracked production source lives in `src/`, `bin/`, package/config files, README, license, and GitHub workflow.
+- Removed generated crawl outputs (`topautoshop.bg/`, `topautoshop-new/`, `docs/`, `react.dev/`, `clerk.com/`, `lex_chapters/`), local cache (`.webpull-cache/`), ad hoc debug/conversion scripts (`_*.mjs`, `_categories.json`), OS files (`.DS_Store`), and local credentials (`credentials.json`).
+- Added ignore coverage for crawl outputs, cache, debug artifacts, and local credentials.
+- Added Docker production assets using the official Playwright runtime image plus Bun. The first Dockerfile variant hung while installing Playwright browsers in `oven/bun`; the final Dockerfile avoids that by using the Playwright base image.
+- Added three usage skills: docs crawl, ecommerce export, and production ops.
+- Updated README for fresh-reader usage, Docker, ecommerce mode, development checks, production notes, and troubleshooting.
+- Updated package metadata, scripts, npm publish workflow, npm package file allowlist, and lockfiles.
+
+Verification performed:
+
+- `bun run format`
+- `npm run check`
+- `bun run src/index.ts https://example.com -m 1 -o /tmp/webpull-smoke`
+- Opened `/tmp/webpull-smoke/index.md` and confirmed frontmatter plus Markdown content.
+- `npm pack --dry-run --json` confirmed the npm package includes source, bin, README, license, package metadata, and the three skills only.
+- `docker build -t webpull-cli:verify .`
+- `docker run --rm webpull-cli:verify --help`
+- `docker run --rm -v /tmp/webpull-docker-smoke-final:/out webpull-cli:verify https://example.com -m 1 -o /out`
+- Opened `/tmp/webpull-docker-smoke-final/index.md` and confirmed frontmatter plus Markdown content.
+- `git diff --check`
+
+Remaining risk:
+
+- No full crawl against a large SPA or ecommerce site was run in this pass; coverage is a production packaging check plus one-page HTTP smoke tests.
+
+## Publish Follow-Up
+
+Goal:
+
+- Update `AGENTS.md` to match the cleaned production repo and push the work to `https://github.com/Ntrakiyski/good-scrape.git` on `main`.
+
+Steps:
+
+- [x] Refresh `AGENTS.md` for current commands, Docker, skills, ecommerce mode, and production artifacts.
+- [x] Run checks after the guide update.
+- [ ] Commit intended changes.
+- [ ] Point `origin` at `Ntrakiyski/good-scrape`.
+- [ ] Push `main` with upstream tracking.
+
+Verification:
+
+- [x] `npm run check` passes.
+- [x] `git status` reviewed before commit.
+- [ ] Commit created.
+- [ ] Push succeeds.
+
+Pre-commit evidence:
+
+- `npm run check` passed after the `AGENTS.md` update.
+- `git diff --check` passed.
+- GitHub CLI authentication is active for `Ntrakiyski`.
