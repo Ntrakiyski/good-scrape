@@ -5,6 +5,15 @@ description: Use when preparing webpull for GitHub, npm publishing, Docker runs,
 
 # Webpull Production Ops
 
+## Available Interfaces
+
+- Local CLI: run with Bun, for example `bun run bin/webpull https://docs.example.com -o ./output -m 100`.
+- Installed CLI: the npm package is `webpull-cli`; the installed command is `webpull`.
+- Docker service: running the image with no command starts the HTTP service on port `3000`.
+- Docker CLI: pass `webpull` as the first container argument.
+- Hosted API: deployed service exposes `GET /health`, `GET /`, and capped `POST /api/pull`.
+- MCP: not available yet. Do not describe this project as an MCP server until an MCP adapter is added.
+
 ## Preflight
 
 1. Run the local checks:
@@ -28,10 +37,32 @@ Build:
 docker build -t webpull-cli .
 ```
 
-Run with an output mount:
+Run the hosted service locally:
 
 ```bash
-docker run --rm -v "$PWD/output:/out" webpull-cli https://docs.example.com -o /out -m 100
+docker run --rm -p 3000:3000 webpull-cli
+```
+
+Run CLI mode with an output mount:
+
+```bash
+docker run --rm -v "$PWD/output:/out" webpull-cli webpull https://docs.example.com -o /out -m 100
+```
+
+## HTTP Service
+
+Health check:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Scrape API:
+
+```bash
+curl -X POST http://localhost:3000/api/pull \
+	-H "content-type: application/json" \
+	-d '{"url":"https://example.com","max":5,"respectRobotsTxt":true}'
 ```
 
 ## Production Crawling
@@ -39,3 +70,4 @@ docker run --rm -v "$PWD/output:/out" webpull-cli https://docs.example.com -o /o
 - Prefer `--respect-robots` for third-party sites.
 - Use `--cache <dir>` only for development or repeat local conversion work.
 - Use repeated `-p/--proxy` values only when the operator owns the proxies and the target policy allows them.
+- Keep hosted `POST /api/pull` requests bounded; the server caps public requests at 25 pages.
