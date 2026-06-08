@@ -15,6 +15,12 @@ export function isSPAShell(html: string): boolean {
 
 	// Extract text content (strip all tags)
 	const textContent = bodyContent.replace(/<[^>]+>/g, "").trim()
+	const compactText = textContent.replace(/\s+/g, " ").trim().toLowerCase()
+
+	// Next/App Router pages can stream real content through React flight scripts while
+	// the visible server body is only a loading shell.
+	const hasNextFlight = /self\.__next_f|__next_f\.push/.test(html)
+	if (hasNextFlight && textContent.length < 120 && compactText.includes("loading")) return true
 
 	// SPA shell: very little text content and has a root mounting div
 	if (textContent.length > 200) return false
@@ -36,4 +42,54 @@ export function isSPAShell(html: string): boolean {
 export function isEmptyContent(content: string): boolean {
 	const stripped = content.replace(/\s+/g, " ").trim()
 	return stripped.length < 50
+}
+
+function pathDepth(url: string): number {
+	try {
+		return new URL(url).pathname.split("/").filter(Boolean).length
+	} catch {
+		return 0
+	}
+}
+
+export function browserProbeUrls(requestedUrl: string, discoveredUrls: string[], limit = 12): string[] {
+	const seen = new Set<string>()
+	const out: string[] = []
+	const add = (url: string) => {
+		try {
+			const parsed = new URL(url)
+			parsed.hash = ""
+			parsed.search = ""
+			const key = parsed.href.replace(/\/$/, "")
+			if (!seen.has(key)) {
+				seen.add(key)
+				out.push(url)
+			}
+		} catch {}
+	}
+
+	add(requestedUrl)
+	for (const url of [...discoveredUrls].sort((a, b) => pathDepth(b) - pathDepth(a))) add(url)
+	for (const url of discoveredUrls) add(url)
+
+	return out.slice(0, limit)
+}
+
+export async function detectBrowserNeed(urls: string[]): Promise<boolean> {
+	const checks = await Promise.all(
+		urls.map(async (url) => {
+			try {
+				const response = await fetch(url, {
+					redirect: "follow",
+					signal: AbortSignal.timeout(10_000),
+				})
+				if (!response.ok) return false
+				return isSPAShell(await response.text())
+			} catch {
+				return false
+			}
+		}),
+	)
+
+	return checks.some(Boolean)
 }

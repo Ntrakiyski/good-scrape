@@ -97,6 +97,17 @@ function fallbackExtract(html: string) {
 	}
 }
 
+function urlKey(url: string): string {
+	try {
+		const parsed = new URL(url)
+		parsed.hash = ""
+		parsed.search = ""
+		return parsed.href.replace(/\/$/, "")
+	} catch {
+		return url.replace(/\/$/, "")
+	}
+}
+
 async function convertToMarkdown(html: string, url: string): Promise<{ title: string; content: string }> {
 	const cleaned = html.replace(STYLE_SCRIPT_RE, "")
 
@@ -108,7 +119,13 @@ async function convertToMarkdown(html: string, url: string): Promise<{ title: st
 	}
 }
 
-function extractLinks(html: string, baseUrl: string, hostname: string, seen: Set<string>): string[] {
+function extractLinks(
+	html: string,
+	baseUrl: string,
+	hostname: string,
+	seen: Set<string>,
+	allowedUrls?: Set<string>,
+): string[] {
 	const out: string[] = []
 	for (const [, href] of html.matchAll(LINK_RE)) {
 		if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:")) continue
@@ -116,7 +133,8 @@ function extractLinks(html: string, baseUrl: string, hostname: string, seen: Set
 			const resolved = new URL(href, baseUrl)
 			if (resolved.hostname !== hostname) continue
 			resolved.hash = ""
-			const key = resolved.href.replace(/\/$/, "")
+			const key = urlKey(resolved.href)
+			if (allowedUrls && !allowedUrls.has(key)) continue
 			if (IGNORED_EXT.test(resolved.pathname)) continue
 			if (seen.has(key)) continue
 			seen.add(key)
@@ -130,9 +148,11 @@ function extractLinks(html: string, baseUrl: string, hostname: string, seen: Set
 export interface CrawlOptions {
 	concurrency?: number
 	useBrowser?: boolean
+	forceBrowser?: boolean
 	proxies?: string[]
 	respectRobotsTxt?: boolean
 	cacheDir?: string
+	allowedUrls?: Set<string>
 	onItem?: (data: CrawlItemData) => void
 	onError?: (url: string, error: string) => void
 }
@@ -144,7 +164,7 @@ export async function crawlWithEngine(seedUrls: string[], options: CrawlOptions 
 	sessionManager.add("http", httpSession)
 
 	let browserSession: BrowserSession | undefined
-	if (options.useBrowser) {
+	if (options.useBrowser || options.forceBrowser) {
 		browserSession = new BrowserSession("browser")
 		sessionManager.add("browser", browserSession, true)
 	}
@@ -167,6 +187,7 @@ export async function crawlWithEngine(seedUrls: string[], options: CrawlOptions 
 	})
 
 	const linkSeen = new Set<string>()
+	const allowedUrls = options.allowedUrls ? new Set([...options.allowedUrls].map((url) => urlKey(url))) : undefined
 
 	async function* convertAndEmit(
 		response: CrawlResponse,
@@ -190,7 +211,7 @@ export async function crawlWithEngine(seedUrls: string[], options: CrawlOptions 
 				return
 			}
 
-			if (isSPAShell(text) && browserSession) {
+			if (browserSession && (options.forceBrowser || isSPAShell(text))) {
 				try {
 					const browserResp = await browserSession.fetch(response.request)
 					if (browserResp.status === 200 && browserResp.body.length > 0) {
@@ -209,7 +230,7 @@ export async function crawlWithEngine(seedUrls: string[], options: CrawlOptions 
 				} catch {
 					hostname = ""
 				}
-				const links = extractLinks(text, finalUrl, hostname, linkSeen)
+				const links = extractLinks(text, finalUrl, hostname, linkSeen, allowedUrls)
 				for (const link of links) {
 					yield new CrawlRequest({
 						url: link,

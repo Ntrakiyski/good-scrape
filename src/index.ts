@@ -4,7 +4,7 @@ import { cpus } from "node:os"
 import { join, resolve } from "node:path"
 import { Effect } from "effect"
 import { frontmatter, productFrontmatter } from "./convert"
-import { isSPAShell } from "./detect"
+import { browserProbeUrls, detectBrowserNeed } from "./detect"
 import { discover } from "./discover"
 import { downloadImages } from "./download"
 import { crawlWithEngine } from "./engine-cli"
@@ -24,6 +24,7 @@ interface Config {
 	respectRobotsTxt: boolean
 	cacheDir?: string
 	ecommerce: boolean
+	browser: boolean
 }
 
 type MediaRef = {
@@ -53,6 +54,7 @@ const parseArgs = (args: string[]): Config => {
     --respect-robots      Respect robots.txt rules
     --cache <dir>         Dev mode cache directory
     --ecommerce           Ecommerce mode: products in subfolders with images
+    --browser             Force browser rendering for client-rendered pages
 `)
 		process.exit(0)
 	}
@@ -74,6 +76,7 @@ const parseArgs = (args: string[]): Config => {
 	let respectRobotsTxt = false
 	let cacheDir: string | undefined
 	let ecommerce = false
+	let browser = false
 
 	let format: Config["format"]
 
@@ -104,10 +107,12 @@ const parseArgs = (args: string[]): Config => {
 			i++
 		} else if ("--ecommerce" === arg) {
 			ecommerce = true
+		} else if ("--browser" === arg) {
+			browser = true
 		}
 	}
 
-	return { url: url.href, out: resolve(out), max, format, proxies, respectRobotsTxt, cacheDir, ecommerce }
+	return { url: url.href, out: resolve(out), max, format, proxies, respectRobotsTxt, cacheDir, ecommerce, browser }
 }
 
 const program = Effect.gen(function* () {
@@ -124,11 +129,12 @@ const program = Effect.gen(function* () {
 			process.exit(1)
 		}
 
-		const sampleHtml = yield* Effect.tryPromise({
-			try: () => fetch(config.url, { redirect: "follow" }).then((r) => r.text()),
-			catch: () => new Error("Failed to detect SPA"),
-		}).pipe(Effect.catchAll(() => Effect.succeed("")))
-		const needsBrowser = isSPAShell(sampleHtml)
+		const needsBrowser =
+			config.browser ||
+			(yield* Effect.tryPromise({
+				try: () => detectBrowserNeed(browserProbeUrls(config.url, urls)),
+				catch: () => new Error("Failed to detect browser need"),
+			}).pipe(Effect.catchAll(() => Effect.succeed(false))))
 		if (needsBrowser) {
 			concurrency = Math.min(concurrency, 4)
 		}
@@ -165,9 +171,11 @@ const program = Effect.gen(function* () {
 			crawlWithEngine(urls, {
 				concurrency,
 				useBrowser: needsBrowser,
+				forceBrowser: config.browser,
 				proxies: config.proxies,
 				respectRobotsTxt: config.respectRobotsTxt,
 				cacheDir: config.cacheDir,
+				allowedUrls: new Set(urls),
 				onItem: (data) => {
 					ok++
 					const { url: finalUrl, title, markdown, media } = data

@@ -28,6 +28,7 @@ bun run src/index.ts <url> --respect-robots
 bun run src/index.ts <url> --cache .webpull-cache
 bun run src/index.ts <url> -p http://proxy:8080
 bun run src/index.ts <url> --ecommerce
+bun run src/index.ts <url> --browser
 ```
 
 ## Docker
@@ -47,7 +48,7 @@ Use mounted output directories for production runs. Do not write generated crawl
 - **Entrypoint**: `src/index.ts`
   - Parses CLI arguments.
   - Runs discovery.
-  - Selects browser concurrency for SPA shells.
+  - Selects browser concurrency for SPA/loading shells or explicit `--browser`.
   - Handles terminal/file output modes.
   - Handles ecommerce product output and image downloads.
 - **Crawler bridge**: `src/engine-cli.ts`

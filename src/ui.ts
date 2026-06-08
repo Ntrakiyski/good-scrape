@@ -29,7 +29,9 @@ export function createUI(url: string, out: string, concurrency: number, mode: "w
 	const render = (state: UIState) => {
 		frame++
 		const cols = process.stderr.columns || 80
-		const pct = Math.round(((state.ok + state.err) / state.total) * 100)
+		const done = state.ok + state.err
+		const frac = state.total > 0 ? Math.min(1, Math.max(0, done / state.total)) : 0
+		const pct = Math.round(frac * 100)
 		const pps = state.elapsed > 0 ? Math.round(state.ok / state.elapsed) : 0
 		const spin = state.workerStates.some((s) => s === "busy")
 			? `${Y}${SPINNER[frame % SPINNER.length]}${RST}`
@@ -44,7 +46,6 @@ export function createUI(url: string, out: string, concurrency: number, mode: "w
 
 		// Progress bar
 		const barWidth = Math.max(0, Math.min(20, cols - 35))
-		const frac = state.total > 0 ? (state.ok + state.err) / state.total : 0
 		const filled = Math.round(frac * barWidth)
 		const bar =
 			barWidth > 0

@@ -13,6 +13,7 @@ description: Use when preparing webpull for GitHub, npm publishing, Docker runs,
 - Docker CLI: pass `webpull` as the first container argument.
 - Hosted API: deployed service exposes `GET /health`, `GET /`, and capped `POST /api/pull`.
 - MCP: not available yet. Do not describe this project as an MCP server until an MCP adapter is added.
+- Browser rendering: use `--browser` when output only contains loading text or shell UI.
 
 ## Preflight
 
@@ -49,6 +50,12 @@ Run CLI mode with an output mount:
 docker run --rm -v "$PWD/output:/out" webpull-cli webpull https://docs.example.com -o /out -m 100
 ```
 
+Run CLI mode with forced browser rendering:
+
+```bash
+docker run --rm -v "$PWD/output:/out" webpull-cli webpull https://docs.example.com --browser -o /out -m 100
+```
+
 ## HTTP Service
 
 Health check:
@@ -62,7 +69,7 @@ Scrape API:
 ```bash
 curl -X POST http://localhost:3000/api/pull \
 	-H "content-type: application/json" \
-	-d '{"url":"https://example.com","max":5,"respectRobotsTxt":true}'
+	-d '{"url":"https://example.com","max":5,"respectRobotsTxt":true,"browser":false}'
 ```
 
 ## Production Crawling
@@ -70,4 +77,4 @@ curl -X POST http://localhost:3000/api/pull \
 - Prefer `--respect-robots` for third-party sites.
 - Use `--cache <dir>` only for development or repeat local conversion work.
 - Use repeated `-p/--proxy` values only when the operator owns the proxies and the target policy allows them.
-- Keep hosted `POST /api/pull` requests bounded; the server caps public requests at 25 pages.
+- Keep hosted `POST /api/pull` requests bounded; the server caps public requests at 50 pages.

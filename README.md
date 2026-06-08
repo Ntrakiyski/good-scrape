@@ -31,10 +31,18 @@ No install is needed for the deployed service. Send a JSON request to the hosted
 ```bash
 curl -X POST https://good-scrape.159.69.35.245.sslip.io/api/pull \
   -H "content-type: application/json" \
-  -d '{"url":"https://example.com","max":5,"respectRobotsTxt":true}'
+  -d '{"url":"https://example.com","max":5,"respectRobotsTxt":true,"browser":false}'
 ```
 
-The hosted API returns JSON with discovered pages and Markdown content. Hosted requests are capped at 25 pages.
+The hosted API returns JSON with discovered pages and Markdown content. Hosted requests are capped at 50 pages.
+
+For client-rendered pages, set `browser` to `true`:
+
+```bash
+curl -X POST https://good-scrape.159.69.35.245.sslip.io/api/pull \
+  -H "content-type: application/json" \
+  -d '{"url":"https://www.annnimate.com/learn/","max":30,"respectRobotsTxt":true,"browser":true}'
+```
 
 ## Run From Source
 
@@ -69,6 +77,7 @@ Options:
 --respect-robots      Respect robots.txt allow, disallow, and crawl-delay rules
 --cache <dir>         Disk cache for faster local iteration
 --ecommerce           Product-oriented export mode
+--browser             Force browser rendering for client-rendered pages
 ```
 
 ## Examples
@@ -109,6 +118,12 @@ Rotate proxies:
 bun run bin/webpull https://docs.example.com \
   -p http://proxy1:8080 \
   -p http://proxy2:8080
+```
+
+Force browser rendering for a client-rendered site:
+
+```bash
+bun run bin/webpull https://www.annnimate.com/learn/ --browser --respect-robots -o ./annnimate-learn
 ```
 
 ## Output
@@ -247,6 +262,7 @@ No pages found:
 Missing or thin Markdown:
 
 - The page may be mostly client-rendered or protected.
+- If the output only says `Loading`, rerun the source or Docker CLI with `--browser`.
 - Try the same URL in a browser and confirm public content is visible.
 - Inspect stderr for conversion or fetch errors.
 

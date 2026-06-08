@@ -296,14 +296,6 @@ export const discover = (baseUrl: string, max: number) =>
 		const hosts = new Set([original.hostname, actual.hostname])
 		const scope = getScopePath(actual.pathname)
 
-		// --- SPA Detection ---
-		if (isSPAShell(html)) {
-			// Preserve hash fragment from original URL for hash-routed SPAs
-			const spaBase = new URL(actual.href)
-			if (original.hash && !spaBase.hash) spaBase.hash = original.hash
-			return yield* discoverSPA(spaBase, html, max, scope, hosts)
-		}
-
 		const origins = [...new Set([original.origin, actual.origin])]
 		const basePaths = [...new Set([actual.pathname.replace(/\/[^/]*$/, "/"), "/"])]
 
@@ -334,6 +326,14 @@ export const discover = (baseUrl: string, max: number) =>
 		if (best.length > 0) {
 			process.stderr.write(`  Found ${best.length} pages via sitemap\n`)
 			return best
+		}
+
+		// --- SPA Detection ---
+		if (isSPAShell(html)) {
+			// Preserve hash fragment from original URL for hash-routed SPAs
+			const spaBase = new URL(actual.href)
+			if (original.hash && !spaBase.hash) spaBase.hash = original.hash
+			return yield* discoverSPA(spaBase, html, max, scope, hosts)
 		}
 
 		process.stderr.write("  No sitemap, extracting from navigation...\n")

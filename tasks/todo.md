@@ -134,3 +134,42 @@ Review:
 - Verified `GET /health` returns `{ "ok": true, "service": "good-scrape" }`.
 - Verified `GET /` returns the Good Scrape UI.
 - Verified `POST /api/pull` against `https://example.com` returns Markdown JSON.
+
+## Annnimate Learn Crawl Follow-Up
+
+Goal:
+
+- Test `good-scrape` on `https://www.annnimate.com/learn/` and capture the `/learn/` subpages and sub-subpages as Markdown.
+
+Constraints:
+
+- Keep generated crawl output outside the repo.
+- Respect robots.txt for this third-party site.
+- Preserve scope under `/learn/`.
+
+Steps:
+
+- [x] Confirm crawler URL scope behavior for `/learn/`.
+- [x] Run a bounded crawl for `https://www.annnimate.com/learn/`.
+- [x] Inspect generated files and confirm representative sub/sub-sub pages were captured.
+- [x] Report output location, page count, and any limitations.
+
+Verification:
+
+- [x] CLI command completed.
+- [x] Output file count checked.
+- [x] Representative Markdown file opened.
+- [x] URLs reviewed for `/learn/` scope.
+
+Review:
+
+- Initial HTTP-only crawl found 27 sitemap pages but produced loading-shell Markdown for rendered pages.
+- Added browser rendering support via `--browser` and a Next/App Router loading-shell heuristic.
+- Fixed engine link following so rendered pages do not expand beyond the discovered URL set.
+- Fixed progress UI clamping and browser-session startup so browser crawls do not crash or hang after completion.
+- Raised the hosted API cap from 25 to 50 pages so this 27-page `/learn/` crawl can fit through curl.
+- Final command: `bun run bin/webpull https://www.annnimate.com/learn/ --browser --respect-robots -m 500 -o /tmp/good-scrape-annnimate-learn-browser`.
+- Final output: 27 Markdown files under `/tmp/good-scrape-annnimate-learn-browser`.
+- Verified `learn/easing/back-out.md` contains rendered article content including the back.out mechanics section.
+- Verified all frontmatter URLs are under `https://www.annnimate.com/learn/`.
+- Verified local `POST /api/pull` with `{"url":"https://www.annnimate.com/learn/","max":30,"respectRobotsTxt":true,"browser":true}` returned 27 pages, `errors: 0`, and rendered `back-out` content.

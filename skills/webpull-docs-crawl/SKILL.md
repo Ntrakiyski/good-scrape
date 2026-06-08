@@ -17,6 +17,7 @@ bun run src/index.ts https://docs.example.com -m 50 -o ./docs.example.com
 3. Inspect the output directory for path shape, frontmatter, missing pages, and noisy boilerplate.
 4. Increase `-m` only after the first run looks correct.
 5. Use `--respect-robots` when crawling third-party production sites unless the operator has a reason not to.
+6. If representative Markdown only contains loading text or shell UI, rerun with `--browser`.
 
 ## Output Choices
 

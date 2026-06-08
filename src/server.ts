@@ -1,18 +1,19 @@
 #!/usr/bin/env bun
 import { cpus } from "node:os"
 import { Effect } from "effect"
-import { isSPAShell } from "./detect"
+import { browserProbeUrls, detectBrowserNeed } from "./detect"
 import { discover } from "./discover"
 import { type CrawlItemData, crawlWithEngine } from "./engine-cli"
 import { closeBrowser } from "./renderer"
 
 const DEFAULT_MAX_PAGES = 5
-const MAX_SERVER_PAGES = 25
+const MAX_SERVER_PAGES = 50
 
 interface ScrapeInput {
 	url: string
 	max: number
 	respectRobotsTxt: boolean
+	browser: boolean
 }
 
 interface ScrapeOutput {
@@ -58,6 +59,7 @@ async function parseInput(request: Request): Promise<ScrapeInput> {
 			url: normalizeUrl(form.get("url")),
 			max: parseMax(form.get("max")),
 			respectRobotsTxt: form.get("respectRobotsTxt") === "on" || form.get("respectRobotsTxt") === "true",
+			browser: form.get("browser") === "on" || form.get("browser") === "true",
 		}
 	}
 
@@ -66,27 +68,21 @@ async function parseInput(request: Request): Promise<ScrapeInput> {
 		url: normalizeUrl(body.url),
 		max: parseMax(body.max),
 		respectRobotsTxt: body.respectRobotsTxt === true,
-	}
-}
-
-async function detectBrowserNeed(url: string): Promise<boolean> {
-	try {
-		const html = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(10_000) }).then((r) => r.text())
-		return isSPAShell(html)
-	} catch {
-		return false
+		browser: body.browser === true,
 	}
 }
 
 async function scrape(input: ScrapeInput): Promise<ScrapeOutput> {
 	const urls = await Effect.runPromise(discover(input.url, input.max))
-	const needsBrowser = await detectBrowserNeed(input.url)
+	const needsBrowser = input.browser || (await detectBrowserNeed(browserProbeUrls(input.url, urls)))
 	const pages: CrawlItemData[] = []
 
 	const result = await crawlWithEngine(urls, {
 		concurrency: needsBrowser ? 4 : Math.max(4, Math.min(12, cpus().length * 2)),
 		useBrowser: needsBrowser,
+		forceBrowser: input.browser,
 		respectRobotsTxt: input.respectRobotsTxt,
+		allowedUrls: new Set(urls),
 		onItem: (data) => pages.push(data),
 	})
 
@@ -151,10 +147,14 @@ const page = () => `<!doctype html>
 					<input name="respectRobotsTxt" type="checkbox" checked>
 					Respect robots.txt
 				</label>
+				<label class="check">
+					<input name="browser" type="checkbox">
+					Browser render
+				</label>
 			</div>
 			<button type="submit">Pull Markdown</button>
 		</form>
-		<p>API: <code>POST /api/pull</code> with JSON <code>{"url":"https://example.com","max":5,"respectRobotsTxt":true}</code>.</p>
+		<p>API: <code>POST /api/pull</code> with JSON <code>{"url":"https://example.com","max":5,"respectRobotsTxt":true,"browser":false}</code>.</p>
 		<pre id="result">Ready.</pre>
 	</main>
 	<script>
@@ -165,6 +165,7 @@ const page = () => `<!doctype html>
 			result.textContent = "Working...";
 			const data = Object.fromEntries(new FormData(form).entries());
 			data.respectRobotsTxt = Boolean(data.respectRobotsTxt);
+			data.browser = Boolean(data.browser);
 			data.max = Number(data.max || ${DEFAULT_MAX_PAGES});
 			try {
 				const response = await fetch("/api/pull", {
