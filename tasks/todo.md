@@ -75,19 +75,20 @@ Steps:
 
 - [x] Refresh `AGENTS.md` for current commands, Docker, skills, ecommerce mode, and production artifacts.
 - [x] Run checks after the guide update.
-- [ ] Commit intended changes.
-- [ ] Point `origin` at `Ntrakiyski/good-scrape`.
-- [ ] Push `main` with upstream tracking.
+- [x] Commit intended changes.
+- [x] Point `origin` at `Ntrakiyski/good-scrape`.
+- [x] Push `main` with upstream tracking.
 
 Verification:
 
 - [x] `npm run check` passes.
 - [x] `git status` reviewed before commit.
-- [ ] Commit created.
-- [ ] Push succeeds.
+- [x] Commit created.
+- [x] Push succeeds.
 
 Pre-commit evidence:
 
 - `npm run check` passed after the `AGENTS.md` update.
 - `git diff --check` passed.
 - GitHub CLI authentication is active for `Ntrakiyski`.
+- Commit `d6e9f34` was pushed to `https://github.com/Ntrakiyski/good-scrape.git` on `main`.
