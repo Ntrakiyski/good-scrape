@@ -112,9 +112,9 @@ Steps:
 - [x] Add an HTTP service wrapper for `/`, `/health`, and `POST /api/pull`.
 - [x] Update Docker defaults for HTTP service deployment while preserving CLI mode.
 - [x] Run local checks and Docker smoke tests.
-- [ ] Commit and push deployment changes.
-- [ ] Create/deploy the Coolify application.
-- [ ] Verify the deployed URL.
+- [x] Commit and push deployment changes.
+- [x] Create/deploy the Coolify application.
+- [x] Verify the deployed URL.
 
 Verification so far:
 
@@ -124,3 +124,13 @@ Verification so far:
 - `docker build -t good-scrape:verify .` passed.
 - Docker service mode responded at `/health` and `POST /api/pull`.
 - Docker CLI mode `webpull --help` passed.
+
+Review:
+
+- Added and pushed commit `382feac` (`add hosted scrape service`) to `main`.
+- Created Coolify app `good-scrape` in project `Autonomous` / environment `production`.
+- Deployed commit `382feac1c878ea3727e6688d82de0d327b82fbb1`; Coolify reported `running:healthy`.
+- Public URL: `https://good-scrape.159.69.35.245.sslip.io`.
+- Verified `GET /health` returns `{ "ok": true, "service": "good-scrape" }`.
+- Verified `GET /` returns the Good Scrape UI.
+- Verified `POST /api/pull` against `https://example.com` returns Markdown JSON.
