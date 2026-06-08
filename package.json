@@ -19,17 +19,18 @@
 		"check": "bun run lint && bun run typecheck && bun run test",
 		"format": "biome format --write .",
 		"lint": "biome check .",
+		"serve": "bun run src/server.ts",
 		"test": "bun run src/index.ts --help",
 		"typecheck": "tsc --noEmit"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Ntrakiyski/webpull-cli.git"
+		"url": "git+https://github.com/Ntrakiyski/good-scrape.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Ntrakiyski/webpull-cli/issues"
+		"url": "https://github.com/Ntrakiyski/good-scrape/issues"
 	},
-	"homepage": "https://github.com/Ntrakiyski/webpull-cli#readme",
+	"homepage": "https://github.com/Ntrakiyski/good-scrape#readme",
 	"engines": {
 		"bun": ">=1.1.0"
 	},

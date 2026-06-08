@@ -17,6 +17,7 @@ bun run check
 bun run lint
 bun run typecheck
 bun run test
+bun run serve
 
 bun run src/index.ts <url>
 bun run bin/webpull <url>
@@ -31,11 +32,12 @@ bun run src/index.ts <url> --ecommerce
 
 ## Docker
 
-The production Dockerfile uses the official Playwright runtime image, installs Bun, installs production dependencies, and runs as `pwuser`.
+The production Dockerfile uses the official Playwright runtime image, installs Bun, installs production dependencies, and runs as `pwuser`. Default container mode starts the HTTP service. Use `webpull` as the first container argument to run the CLI.
 
 ```bash
 docker build -t webpull-cli .
-docker run --rm -v "$PWD/output:/out" webpull-cli https://docs.example.com -o /out -m 100
+docker run --rm -p 3000:3000 webpull-cli
+docker run --rm -v "$PWD/output:/out" webpull-cli webpull https://docs.example.com -o /out -m 100
 ```
 
 Use mounted output directories for production runs. Do not write generated crawl output into the repo.
@@ -63,6 +65,8 @@ Use mounted output directories for production runs. Do not write generated crawl
   - URL-to-path mapping with hash-route support and path traversal protection.
 - **Product mode**: `src/product.ts` and `src/download.ts`
   - Product sitemap detection, product slug extraction, and image downloads.
+- **HTTP service**: `src/server.ts`
+  - Serves `/`, `/health`, and capped `POST /api/pull` requests for hosted deployments.
 
 ## Output Behavior
 
@@ -108,6 +112,7 @@ Use these for repeatable agent/operator workflows around docs crawls, ecommerce 
 | `src/write.ts` | Markdown writer and path traversal guard |
 | `src/product.ts` | Ecommerce product sitemap helpers |
 | `src/download.ts` | Image download helpers |
+| `src/server.ts` | HTTP service wrapper |
 | `src/ui.ts` | Terminal progress UI |
 | `src/routes.ts` | JavaScript route extraction |
 | `src/detect.ts` | SPA shell detection |

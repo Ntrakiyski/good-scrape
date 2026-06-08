@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+set -e
+
+if [ "$#" -eq 0 ]; then
+	exec bun /app/src/server.ts
+fi
+
+case "$1" in
+	serve|server)
+		shift
+		exec bun /app/src/server.ts "$@"
+		;;
+	webpull)
+		shift
+		exec bun /app/bin/webpull "$@"
+		;;
+	http://*|https://*|--help|-h|-*)
+		exec bun /app/bin/webpull "$@"
+		;;
+	*)
+		exec "$@"
+		;;
+esac

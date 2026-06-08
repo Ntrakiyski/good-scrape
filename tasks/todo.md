@@ -92,3 +92,35 @@ Pre-commit evidence:
 - `git diff --check` passed.
 - GitHub CLI authentication is active for `Ntrakiyski`.
 - Commit `d6e9f34` was pushed to `https://github.com/Ntrakiyski/good-scrape.git` on `main`.
+
+## Coolify Deployment Follow-Up
+
+Goal:
+
+- Deploy `good-scrape` to the Coolify `Autonomous` project and return a public URL.
+
+Constraints:
+
+- The repo was CLI-only, so a persistent HTTP service is required before Coolify can expose a URL.
+- Keep CLI behavior available in Docker via the `webpull` entrypoint command.
+- Cap hosted scrape requests to avoid unbounded public crawling.
+
+Steps:
+
+- [x] Confirm Coolify tooling is available.
+- [x] Locate the `Autonomous` project, production environment, server, destination, and GitHub source.
+- [x] Add an HTTP service wrapper for `/`, `/health`, and `POST /api/pull`.
+- [x] Update Docker defaults for HTTP service deployment while preserving CLI mode.
+- [x] Run local checks and Docker smoke tests.
+- [ ] Commit and push deployment changes.
+- [ ] Create/deploy the Coolify application.
+- [ ] Verify the deployed URL.
+
+Verification so far:
+
+- `npm run check` passed.
+- Local `bun run serve` responded at `/health`.
+- Local `POST /api/pull` returned Markdown JSON for `https://example.com`.
+- `docker build -t good-scrape:verify .` passed.
+- Docker service mode responded at `/health` and `POST /api/pull`.
+- Docker CLI mode `webpull --help` passed.

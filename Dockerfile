@@ -22,5 +22,5 @@ COPY --chown=pwuser:pwuser README.md LICENSE ./
 
 USER pwuser
 WORKDIR /work
-ENTRYPOINT ["bun", "/app/bin/webpull"]
-CMD ["--help"]
+EXPOSE 3000
+ENTRYPOINT ["/app/bin/docker-entrypoint"]

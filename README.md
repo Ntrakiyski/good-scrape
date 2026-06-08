@@ -2,7 +2,7 @@
 
 Pull public websites into local Markdown.
 
-`webpull-cli` is a Bun-powered CLI for crawling documentation sites, mostly-static websites, and ecommerce product pages. It discovers pages, fetches HTML or rendered SPA content, converts useful page content to Markdown, and writes the result as local files or terminal output.
+`webpull-cli` is a Bun-powered crawler for documentation sites, mostly-static websites, and ecommerce product pages. It ships as both a CLI and a small HTTP service. It discovers pages, fetches HTML or rendered SPA content, converts useful page content to Markdown, and writes the result as local files, terminal output, or JSON from the service API.
 
 ## What It Is For
 
@@ -150,16 +150,22 @@ Build the image:
 docker build -t webpull-cli .
 ```
 
-Run a crawl with a mounted output directory:
+Run the HTTP service:
 
 ```bash
-docker run --rm -v "$PWD/output:/out" webpull-cli https://docs.example.com -o /out -m 100
+docker run --rm -p 3000:3000 webpull-cli
+```
+
+Run a CLI crawl with a mounted output directory:
+
+```bash
+docker run --rm -v "$PWD/output:/out" webpull-cli webpull https://docs.example.com -o /out -m 100
 ```
 
 Run ecommerce mode:
 
 ```bash
-docker run --rm -v "$PWD/shop-output:/out" webpull-cli https://shop.example.com --ecommerce -o /out -m 500
+docker run --rm -v "$PWD/shop-output:/out" webpull-cli webpull https://shop.example.com --ecommerce -o /out -m 500
 ```
 
 The Docker image uses the official Playwright runtime image, installs Bun, and installs production dependencies.
@@ -202,6 +208,14 @@ bun run test
 ```
 
 `bun run test` is a CLI smoke test that prints help. There is no separate test framework configured.
+
+Run the HTTP service locally:
+
+```bash
+bun run serve
+```
+
+The service listens on `PORT` or `3000`, serves a small UI at `/`, a health check at `/health`, and a capped scrape API at `POST /api/pull`.
 
 ## Usage Skills
 
