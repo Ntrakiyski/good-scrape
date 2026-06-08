@@ -173,3 +173,4 @@ Review:
 - Verified `learn/easing/back-out.md` contains rendered article content including the back.out mechanics section.
 - Verified all frontmatter URLs are under `https://www.annnimate.com/learn/`.
 - Verified local `POST /api/pull` with `{"url":"https://www.annnimate.com/learn/","max":30,"respectRobotsTxt":true,"browser":true}` returned 27 pages, `errors: 0`, and rendered `back-out` content.
+- Deployed commit `ef665ae` to Coolify and verified the live hosted API returned 27 pages, `errors: 0`, all URLs under `/learn`, and rendered `back-out` content.
